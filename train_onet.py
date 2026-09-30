@@ -5,37 +5,18 @@ from pathlib import Path
 from onet import ONet
 
 
-# ======================== ONet训练超参数 ========================
-# DIM必须与train_single.py中的IMAGE_SIZE相同。
-DIM = 128                # 一个坐标轴上的位置类别数
-HIDDEN_SIZE = 256        # ONet隐藏层宽度
-SAMPLES_PER_BIN = 100    # 每一个位置区间采样多少个连续坐标
-TRAIN_STEPS = 5000       # 参数更新次数
-LEARNING_RATE = 1e-4     # Adam学习率
-LOG_INTERVAL = 500       # 每隔多少次更新打印一次结果
-RANDOM_SEED = 7          # 固定初始化，方便复现实验
-# ------------------------------------------------------------
-# DEVICE：训练设备选择，可填以下任一字符串：
-#   "auto"   —— 自动选择（优先 CUDA → MPS → CPU）
-#   "cuda"   —— 使用第一块 NVIDIA/AMD GPU
-#   "cuda:0" —— 显式指定第 0 块 GPU
-#   "cuda:1" —— 显式指定第 1 块 GPU（多卡机器）
-#   "mps"    —— Apple Silicon (M1/M2/M3...) 的 Metal 后端
-#   "cpu"    —— 纯 CPU（macbook 默认）
-DEVICE = "auto"
-# ===============================================================
-def resolve_device(spec):
-    """根据字符串解析训练设备，方便后续把张量/模型搬过去。"""
-    if spec is None or str(spec).strip() == "" or str(spec).strip().lower() == "auto":
-        if torch.cuda.is_available():
-            return torch.device("cuda")
-        if getattr(torch.backends, "mps", None) is not None and torch.backends.mps.is_available():
-            return torch.device("mps")
-        return torch.device("cpu")
-    return torch.device(spec)
+# 参数统一定义在 config.py；别名保留原先教学代码的变量名称。
+from config import (
+    IMAGE_SIZE as DIM, ONET_HIDDEN_SIZE as HIDDEN_SIZE,
+    ONET_SAMPLES_PER_BIN as SAMPLES_PER_BIN,
+    ONET_TRAIN_STEPS as TRAIN_STEPS, ONET_LEARNING_RATE as LEARNING_RATE,
+    ONET_LOG_INTERVAL as LOG_INTERVAL, ONET_RANDOM_SEED as RANDOM_SEED,
+    DEVICE, resolve_device, validate_config, onet_checkpoint_path,
+)
 
 
 if __name__ == '__main__':
+    validate_config()
     device = resolve_device(DEVICE)
     print("使用训练设备：", device)
 
@@ -118,7 +99,7 @@ if __name__ == '__main__':
 
     check_sample_ids = [
         0,
-        SAMPLES_PER_BIN,
+        min(SAMPLES_PER_BIN, len(xs) - 1),
         min(12 * SAMPLES_PER_BIN + 34, len(xs) - 1),
         (DIM // 2) * SAMPLES_PER_BIN,
         len(xs) - 1,
@@ -132,13 +113,9 @@ if __name__ == '__main__':
             "预测编号：", predicted_indices[i].item(),
         )
 
-    project_dir = Path(__file__).resolve().parent
-    checkpoint_dir = project_dir / "checkpoints"
-    checkpoint_dir.mkdir(exist_ok=True)
+    checkpoint_path = onet_checkpoint_path()
+    checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
-    checkpoint_path = (
-        checkpoint_dir / f"onet_{DIM}_ce_{TRAIN_STEPS}.pth"
-    )
     torch.save(model.state_dict(), checkpoint_path)
     print("模型参数已保存到：", checkpoint_path)
 
